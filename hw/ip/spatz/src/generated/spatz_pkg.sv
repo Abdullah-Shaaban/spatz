@@ -15,15 +15,15 @@ package spatz_pkg;
   // Number of IPUs in each VFU (between 1 and 8)
   localparam int unsigned N_IPU = 1;
   // Number of FPUs in each VFU (between 1 and 8)
-  localparam int unsigned N_FPU = 4;
+  localparam int unsigned N_FPU = 0;
   // Number of FUs in each VFU
   localparam int unsigned N_FU  = N_IPU > N_FPU ? N_IPU : N_FPU;
   // FPU support
   localparam bit FPU            = N_FPU != 0;
   // Single-precision floating point support
-  localparam bit RVF            = 1;
+  localparam bit RVF            = 0;
   // Double-precision floating-point support
-  localparam bit RVD            = 1;
+  localparam bit RVD            = 0;
   // Vector support
   localparam bit RVV            = 1;
 
@@ -32,7 +32,7 @@ package spatz_pkg;
   // Maximum size of a single vector element in bytes
   localparam int unsigned ELENB  = ELEN / 8;
   // Number of bits in a vector register
-  localparam int unsigned VLEN   = 512;
+  localparam int unsigned VLEN   = 128;
   // Number of bytes in a vector register
   localparam int unsigned VLENB  = VLEN / 8;
   // Maximum vector length in elements
@@ -54,7 +54,7 @@ package spatz_pkg;
   // Number of VRF words
   localparam int unsigned NrVRFWords       = NRVREG * NrWordsPerVector;
   // Number of VRF banks
-  localparam int unsigned NrVRFBanks       = 4;
+  localparam int unsigned NrVRFBanks       = 2;
   // Number of elements per VRF Bank
   localparam int unsigned NrWordsPerBank   = NrVRFWords / NrVRFBanks;
 
@@ -121,6 +121,7 @@ package spatz_pkg;
     VCFG,
     // VCSR
     VCSR,
+    // TODO: remove FP instructions
     // Floating point instructions
     VFADD, VFSUB, VFMUL,
     VFMINMAX, VFSGNJ, VFCMP, VFCLASS,
@@ -181,6 +182,7 @@ package spatz_pkg;
     logic vm;
     logic insert;
     logic vmv;
+    // TODO: add rest of permutation
   } op_sld_t;
 
   // Result from decoder
