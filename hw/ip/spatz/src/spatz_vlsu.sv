@@ -640,16 +640,23 @@ module spatz_vlsu
       max_elements = (commit_insn_q.vl >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
 
       // Full transfer
-      if (commit_insn_q.vl[$clog2(ELENB) +: $clog2(N_FU)] > fu)
+      // TODO: fix compilation errors when N_FU=1 
+      //       - Range width must be greater than zero. Is using idx_width correct?
+      //       - Range of part-select is reversed for vl and vstart. 
+      // if (commit_insn_q.vl[$clog2(ELENB) +: $clog2(N_FU)] > fu)
+      if (commit_insn_q.vl[$clog2(ELENB) +: idx_width(N_FU)] > fu)
         max_elements += ELENB;
-      else if (commit_insn_q.vl[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
+      // else if (commit_insn_q.vl[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
+      else if (commit_insn_q.vl[$clog2(N_FU*ELENB) +: idx_width(ELENB)] == fu)
         max_elements += commit_insn_q.vl[$clog2(ELENB)-1:0];
 
       commit_counter_load[fu] = commit_insn_pop;
       commit_counter_d[fu]    = (commit_insn_q.vstart >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
-      if (commit_insn_q.vstart[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] > fu)
+      // if (commit_insn_q.vstart[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] > fu)
+      if (commit_insn_q.vstart[$clog2(N_FU*ELENB) +: idx_width(ELENB)] > fu)
         commit_counter_d[fu] += ELENB;
-      else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
+      // else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
+      else if (commit_insn_q.vstart[$clog2(N_FU*ELENB) +: idx_width(ELENB)] == fu)
         commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
       commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
       commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));

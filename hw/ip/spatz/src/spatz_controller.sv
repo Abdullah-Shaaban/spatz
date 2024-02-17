@@ -379,6 +379,7 @@ module spatz_controller
   assign vsldu_stall = ~vsldu_req_ready_i & (spatz_req.ex_unit == SLD);
 
   // Running instructions
+  // running_insn_ is a vector of flags to indicate the instructions running currently on Spatz
   logic      [NrParallelInstructions-1:0] running_insn_d, running_insn_q;
   spatz_id_t                              next_insn_id;
   logic                                   running_insn_full;
@@ -471,6 +472,7 @@ module spatz_controller
     issue_rsp_o = '0;
 
     // Is there something running on Spatz? If so, prevent Snitch from reading the fcsr register
+    // "isfloat" is different from "accept" because Spatz can queue NrParallelInstructions instructions
     issue_rsp_o.isfloat = |running_insn_q;
 
     // We have a new valid instruction
@@ -555,6 +557,7 @@ module spatz_controller
 
     vfu_rsp_ready = 1'b0;
 
+    // NOTE: Decoder asserts use_rd when a result is written back to the scalar core
     if (retire_csr) begin
 `ifdef MEMPOOL_SPATZ
       rsp_d.write = 1'b1;
@@ -581,6 +584,9 @@ module spatz_controller
         rsp_d.data  = elen_t'(vl_d);
         rsp_valid_d = 1'b1;
       end
+      if (spatz_req.use_rd) begin
+        rsp_d.we = 1'b1;
+      end
     end else if (vfu_rsp_valid) begin
       rsp_d.id      = vfu_rsp.rd;
       rsp_d.data    = vfu_rsp.result;
@@ -589,6 +595,9 @@ module spatz_controller
 `endif
       rsp_valid_d   = 1'b1;
       vfu_rsp_ready = 1'b1;
+      if (spatz_req.use_rd) begin
+        rsp_d.we = 1'b1;
+      end
     end
   end // retire
 
