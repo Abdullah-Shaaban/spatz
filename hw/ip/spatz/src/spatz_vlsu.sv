@@ -631,40 +631,56 @@ module spatz_vlsu
     assign catchup[i] = (commit_counter_q[i] < vreg_start_0) & (commit_counter_max[i] != commit_counter_q[i]);
   end: gen_catchup
 
-  for (genvar fu = 0; fu < N_FU; fu++) begin: gen_vreg_counter_proc
+  if(N_FU > 1) begin
+    for (genvar fu = 0; fu < N_FU; fu++) begin: gen_vreg_counter_proc
+      // The total amount of elements we have to work through
+      vlen_t max_elements;
+  
+      always_comb begin
+        // Default value
+        max_elements = (commit_insn_q.vl >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
+  
+        // Full transfer
+        // TODO: fix compilation errors when N_FU=1 
+        //       - Range width must be greater than zero. Is using idx_width correct?
+        //       - Range of part-select is reversed for vl and vstart. 
+        // if (commit_insn_q.vl[$clog2(ELENB) +: $clog2(N_FU)] > fu)
+        if (commit_insn_q.vl[$clog2(ELENB) +: idx_width(N_FU)] > fu)
+          max_elements += ELENB;
+        else if (commit_insn_q.vl[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
+        // else if (commit_insn_q.vl[$clog2(N_FU*ELENB) +: idx_width(ELENB)] == fu)
+          max_elements += commit_insn_q.vl[$clog2(ELENB)-1:0];
+  
+        commit_counter_load[fu] = commit_insn_pop;
+        commit_counter_d[fu]    = (commit_insn_q.vstart >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
+        if (commit_insn_q.vstart[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] > fu)
+        // if (commit_insn_q.vstart[$clog2(N_FU*ELENB) +: idx_width(ELENB)] > fu)
+          commit_counter_d[fu] += ELENB;
+        else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
+        // else if (commit_insn_q.vstart[$clog2(N_FU*ELENB) +: idx_width(ELENB)] == fu)
+          commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
+        commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
+        commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
+        commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
+        commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
+        commit_counter_max[fu]     = max_elements;
+      end
+    end
+  end else begin
     // The total amount of elements we have to work through
     vlen_t max_elements;
-
     always_comb begin
-      // Default value
-      max_elements = (commit_insn_q.vl >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
-
-      // Full transfer
-      // TODO: fix compilation errors when N_FU=1 
-      //       - Range width must be greater than zero. Is using idx_width correct?
-      //       - Range of part-select is reversed for vl and vstart. 
-      // if (commit_insn_q.vl[$clog2(ELENB) +: $clog2(N_FU)] > fu)
-      if (commit_insn_q.vl[$clog2(ELENB) +: idx_width(N_FU)] > fu)
-        max_elements += ELENB;
-      // else if (commit_insn_q.vl[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
-      else if (commit_insn_q.vl[$clog2(N_FU*ELENB) +: idx_width(ELENB)] == fu)
-        max_elements += commit_insn_q.vl[$clog2(ELENB)-1:0];
-
-      commit_counter_load[fu] = commit_insn_pop;
-      commit_counter_d[fu]    = (commit_insn_q.vstart >> $clog2(N_FU*ELENB)) << $clog2(ELENB);
-      // if (commit_insn_q.vstart[$clog2(N_FU*ELENB)-1:$clog2(ELENB)] > fu)
-      if (commit_insn_q.vstart[$clog2(N_FU*ELENB) +: idx_width(ELENB)] > fu)
-        commit_counter_d[fu] += ELENB;
-      // else if (commit_insn_q.vstart[idx_width(N_FU*ELENB)-1:$clog2(ELENB)] == fu)
-      else if (commit_insn_q.vstart[$clog2(N_FU*ELENB) +: idx_width(ELENB)] == fu)
-        commit_counter_d[fu] += commit_insn_q.vstart[$clog2(ELENB)-1:0];
-      commit_operation_valid[fu] = commit_insn_valid && (commit_counter_q[fu] != max_elements) && (catchup[fu] || (!catchup[fu] && ~|catchup));
-      commit_operation_last[fu]  = commit_operation_valid[fu] && ((max_elements - commit_counter_q[fu]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
-      commit_counter_delta[fu]   = !commit_operation_valid[fu] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[fu] ? (max_elements - commit_counter_q[fu]) : vlen_t'(ELENB);
-      commit_counter_en[fu]      = commit_operation_valid[fu] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
-      commit_counter_max[fu]     = max_elements;
+      max_elements              = commit_insn_q.vl; 
+      commit_counter_load[0]    = commit_insn_pop;
+      commit_counter_d[0]       = commit_insn_q.vstart;
+      commit_operation_valid[0] = commit_insn_valid && (commit_counter_q[0] != max_elements) && (catchup[0] || (!catchup[0] && ~|catchup));
+      commit_operation_last[0]  = commit_operation_valid[0] && ((max_elements - commit_counter_q[0]) <= (commit_is_single_element_operation ? commit_single_element_size : ELENB));
+      commit_counter_delta[0]   = !commit_operation_valid[0] ? vlen_t'('d0) : commit_is_single_element_operation ? vlen_t'(commit_single_element_size) : commit_operation_last[0] ? (max_elements - commit_counter_q[0]) : vlen_t'(ELENB);
+      commit_counter_en[0]      = commit_operation_valid[0] && (commit_insn_q.is_load && vrf_req_valid_d && vrf_req_ready_d) || (!commit_insn_q.is_load && vrf_rvalid_i[0] && vrf_re_o[0] && (!mem_is_indexed || vrf_rvalid_i[1]));
+      commit_counter_max[0]     = max_elements;
     end
   end
+
 
   assign vd_elem_id = (commit_counter_q[0] > vreg_start_0) ? commit_counter_q[0] >> $clog2(ELENB) : commit_counter_q[N_FU-1] >> $clog2(ELENB);
 

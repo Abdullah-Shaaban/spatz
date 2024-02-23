@@ -41,7 +41,7 @@ module spatz_vrf
   //////////////
 
   typedef logic [$bits(vrf_addr_t)-$clog2(NrVRFBanks)-1:0] vregfile_addr_t;
-
+  // Convert from address of a Word in the VRF to the address of a Word in a bank.
   function automatic logic [$clog2(NrWordsPerBank)-1:0] f_vreg(vrf_addr_t addr);
     f_vreg = addr[$clog2(NrVRFWords)-1:$clog2(NrVRFBanks)];
   endfunction: f_vreg
