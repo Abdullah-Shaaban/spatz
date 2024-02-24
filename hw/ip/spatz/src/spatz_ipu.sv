@@ -26,6 +26,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     // Result Output
     output elenb_t be_o,
     output elen_t  result_o,
+    output logic   fixedpoint_sat_o,
     output elenb_t result_valid_o,
     input  logic   result_ready_i,
     output tag_t   tag_o,
@@ -80,7 +81,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
     // Is the operation signed?
     logic is_signed_d;
-    assign is_signed_d = operation_i inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM};
+    assign is_signed_d = operation_i inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM, VSADD, VSSUB};
     `FFL(is_signed, is_signed_d, operation_valid_i && operation_ready_o, 1'b0)
 
     // Is the operation signed and is this a VMULHSU?
@@ -144,6 +145,10 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       logic ew32_valid;
     } lane_signal_res_valid_t;
     lane_signal_res_valid_t lane_signal_res_valid;
+
+    // Fixed-point saturation signals for the 4 lanes
+    logic [3:0] fixedpoint_sat;
+    assign fixedpoint_sat_o = |fixedpoint_sat;
 
     /////////////////
     // Distributor //
@@ -257,6 +262,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .carry_i          (lane_signal_inp.ew8_carry[0]      ),
       .sew_i            (sew                               ),
       .result_o         (lane_signal_res.ew8_res[0]        ),
+      .fixedpoint_sat_o (fixedpoint_sat[0]                 ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[0]),
       .result_ready_i   (result_ready_i                    )
     );
@@ -275,6 +281,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .carry_i          (lane_signal_inp.ew8_carry[1]      ),
       .sew_i            (sew                               ),
       .result_o         (lane_signal_res.ew8_res[1]        ),
+      .fixedpoint_sat_o (fixedpoint_sat[1]                 ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[1]),
       .result_ready_i   (result_ready_i                    )
     );
@@ -293,6 +300,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .carry_i          (lane_signal_inp.ew16_carry      ),
       .sew_i            (sew                             ),
       .result_o         (lane_signal_res.ew16_res        ),
+      .fixedpoint_sat_o (fixedpoint_sat[2]               ),
       .result_valid_o   (lane_signal_res_valid.ew16_valid),
       .result_ready_i   (result_ready_i                  )
     );
@@ -311,6 +319,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .carry_i          (lane_signal_inp.ew32_carry      ),
       .sew_i            (sew                             ),
       .result_o         (lane_signal_res.ew32_res        ),
+      .fixedpoint_sat_o (fixedpoint_sat[3]               ),
       .result_valid_o   (lane_signal_res_valid.ew32_valid),
       .result_ready_i   (result_ready_i                  )
     );
@@ -356,6 +365,10 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       logic ew64_valid;
     } lane_signal_res_valid_t;
     lane_signal_res_valid_t lane_signal_res_valid;
+
+    // Fixed-point saturation signals for the 8 lanes
+    logic [7:0] fixedpoint_sat;
+    assign fixedpoint_sat_o = |fixedpoint_sat;
 
     /////////////////
     // Distributor //
@@ -522,6 +535,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .carry_i          (lane_signal_inp.ew8_carry[0]      ),
       .sew_i            (sew                               ),
       .result_o         (lane_signal_res.ew8_res[0]        ),
+      .fixedpoint_sat_o (fixedpoint_sat[0]     ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[0]),
       .result_ready_i   (result_ready_i                    )
     );
@@ -540,6 +554,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .carry_i          (lane_signal_inp.ew8_carry[1]      ),
       .sew_i            (sew                               ),
       .result_o         (lane_signal_res.ew8_res[1]        ),
+      .fixedpoint_sat_o (fixedpoint_sat[1]     ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[1]),
       .result_ready_i   (result_ready_i                    )
     );
@@ -558,6 +573,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .carry_i          (lane_signal_inp.ew8_carry[2]      ),
       .sew_i            (sew                               ),
       .result_o         (lane_signal_res.ew8_res[2]        ),
+      .fixedpoint_sat_o (fixedpoint_sat[2]     ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[2]),
       .result_ready_i   (result_ready_i                    )
     );
@@ -576,6 +592,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .carry_i          (lane_signal_inp.ew8_carry[3]      ),
       .sew_i            (sew                               ),
       .result_o         (lane_signal_res.ew8_res[3]        ),
+      .fixedpoint_sat_o (fixedpoint_sat[3]     ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[3]),
       .result_ready_i   (result_ready_i                    )
     );
@@ -594,6 +611,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .carry_i          (lane_signal_inp.ew16_carry[0]      ),
       .sew_i            (sew                                ),
       .result_o         (lane_signal_res.ew16_res[0]        ),
+      .fixedpoint_sat_o (fixedpoint_sat[4]      ),
       .result_valid_o   (lane_signal_res_valid.ew16_valid[0]),
       .result_ready_i   (result_ready_i                     )
     );
@@ -612,6 +630,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .carry_i          (lane_signal_inp.ew16_carry[1]      ),
       .sew_i            (sew                                ),
       .result_o         (lane_signal_res.ew16_res[1]        ),
+      .fixedpoint_sat_o (fixedpoint_sat[5]      ),
       .result_valid_o   (lane_signal_res_valid.ew16_valid[1]),
       .result_ready_i   (result_ready_i                     )
     );
@@ -630,6 +649,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .carry_i          (lane_signal_inp.ew32_carry      ),
       .sew_i            (sew                             ),
       .result_o         (lane_signal_res.ew32_res        ),
+      .fixedpoint_sat_o (fixedpoint_sat[6]   ),
       .result_valid_o   (lane_signal_res_valid.ew32_valid),
       .result_ready_i   (result_ready_i                  )
     );
@@ -648,6 +668,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .carry_i          (lane_signal_inp.ew64_carry      ),
       .sew_i            (sew                             ),
       .result_o         (lane_signal_res.ew64_res        ),
+      .fixedpoint_sat_o (fixedpoint_sat[7]   ),
       .result_valid_o   (lane_signal_res_valid.ew64_valid),
       .result_ready_i   (result_ready_i                  )
     );

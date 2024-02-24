@@ -42,6 +42,7 @@ module spatz_controller
     input  logic                                   vfu_rsp_valid_i,
     output logic                                   vfu_rsp_ready_o,
     input  vfu_rsp_t                               vfu_rsp_i,
+    input  logic                                   vfu_fixedpoint_sat_i,
     // VLSU
     input  logic                                   vlsu_req_ready_i,
     input  logic                                   vlsu_rsp_valid_i,
@@ -77,10 +78,13 @@ module spatz_controller
   vlen_t  vstart_d, vstart_q;
   vlen_t  vl_d, vl_q;
   vtype_t vtype_d, vtype_q;
+  // Only VXSAT[0] is meaningful
+  logic  vxsat_d, vxsat_q;
 
   `FF(vstart_q, vstart_d, '0)
   `FF(vl_q, vl_d, '0)
   `FF(vtype_q, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
+  `FF(vxsat_q, vxsat_d, '0)
 
   always_comb begin : proc_vcsr
     automatic logic [$clog2(MAXVL):0] vlmax = 0;
@@ -88,6 +92,9 @@ module spatz_controller
     vstart_d = vstart_q;
     vl_d     = vl_q;
     vtype_d  = vtype_q;
+    // If at any time a fixed-point saturation occurs, we set the VXSAT[0] bit
+    if (vfu_fixedpoint_sat_i) vxsat_d = 1'b1;
+    else                      vxsat_d = vxsat_q;
 
     if (spatz_req_valid) begin
       // Reset vstart to zero if we have a new non CSR operation
@@ -103,6 +110,14 @@ module spatz_controller
           vstart_d = vstart_q | vlen_t'(spatz_req.rs1);
         end else if (spatz_req.op_cfg.clear_vstart) begin
           vstart_d = vstart_q & ~vlen_t'(spatz_req.rs1);
+        end
+        // CSR instruction for VXSAT
+        if (spatz_req.op_cfg.write_vxsat) begin
+          vxsat_d = spatz_req.rs1[0];
+        end else if (spatz_req.op_cfg.set_vxsat) begin
+          vxsat_d = vxsat_q | spatz_req.rs1[0];
+        end else if (spatz_req.op_cfg.clear_vxsat) begin
+          vxsat_d = vxsat_q & ~spatz_req.rs1[0];
         end
       end
 
@@ -557,7 +572,7 @@ module spatz_controller
 
     vfu_rsp_ready = 1'b0;
 
-    // NOTE: Decoder asserts use_rd when a result is written back to the scalar core
+    // NOTE: Decoder asserts use_rd when a result should be written back to the scalar core
     if (retire_csr) begin
 `ifdef MEMPOOL_SPATZ
       rsp_d.write = 1'b1;
@@ -570,7 +585,7 @@ module spatz_controller
             riscv_instr::CSR_VL    : rsp_d.data = elen_t'(vl_q);
             riscv_instr::CSR_VTYPE : rsp_d.data = elen_t'(vtype_q);
             riscv_instr::CSR_VLENB : rsp_d.data = elen_t'(VLENB);
-            riscv_instr::CSR_VXSAT : rsp_d.data = '0;
+            riscv_instr::CSR_VXSAT : rsp_d.data = {{(ELEN-1){1'b0}},vxsat_q};
             riscv_instr::CSR_VXRM  : rsp_d.data = '0;
             riscv_instr::CSR_VCSR  : rsp_d.data = '0;
             default: rsp_d.data                 = '0;

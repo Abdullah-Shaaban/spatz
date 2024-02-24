@@ -24,7 +24,8 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     input  logic  carry_i,
     input  vew_e  sew_i,
     // Result Output
-    output data_t result_o,
+    output data_t result_o, 
+    output logic  fixedpoint_sat_o,
     output logic  result_valid_o,
     input  logic  result_ready_i
   );
@@ -94,6 +95,77 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
   assign adder_result      = operation_valid_i ? $signed(arith_op2) + $signed(arith_op1) + carry_i : '0;
   assign subtractor_result = operation_valid_i ? $signed(arith_op2) - $signed(arith_op1) - carry_i : '0;
+
+  // Fixed-point saturation
+  logic add_overflow, sub_overflow;
+  logic [$clog2(ELEN)-1:0] msb_indx;
+  data_t add_sat_val, sub_sat_val;
+
+  // Select sign bit index based on SEW
+  if (Width == 64) begin
+    always_comb begin
+      unique case (sew_i)
+        rvv_pkg::EW_64: msb_indx = 63;
+        rvv_pkg::EW_32: msb_indx = 31;
+        rvv_pkg::EW_16: msb_indx = 15;
+        default       : msb_indx = 7;
+      endcase
+    end
+  end else if (Width == 32) begin
+    always_comb begin
+      unique case (sew_i)
+        rvv_pkg::EW_32: msb_indx = 31;
+        rvv_pkg::EW_16: msb_indx = 15;
+        default       : msb_indx = 7;
+      endcase
+    end
+  end else if (Width == 16) begin
+    always_comb begin
+      unique case (sew_i)
+        rvv_pkg::EW_16: msb_indx = 15;
+        default       : msb_indx = 7;
+      endcase
+    end
+  end else if (Width == 8) begin
+    assign msb_indx = 7;
+  end
+      
+  // Detect overflow and assign saturation value
+  always_comb begin
+    if (is_signed_i) begin
+      // Signed overflow is detected using the sign of the result and the sign of the operands
+      add_overflow = (arith_op1[Width-1] == arith_op2[Width-1]) && (adder_result[msb_indx] != arith_op1[Width-1]);
+      sub_overflow = (arith_op1[Width-1] != arith_op2[Width-1]) && (subtractor_result[msb_indx] != arith_op2[Width-1]); // op2's sign was NOT "inverted"
+    end else begin
+      // Unsigned overflow is detected using the carry out
+      add_overflow = adder_result[msb_indx+1];
+      sub_overflow = subtractor_result[msb_indx+1];
+    end
+
+    // Default saturation values (unsigned)
+    add_sat_val = {(Width){1'b1}};
+    sub_sat_val = {(Width){1'b0}};
+    if (is_signed_i) begin
+      // Saturation is needed when the result overflows. Therefore, the sign of the saturation value is opposite to the sign of the result.
+      if (adder_result[msb_indx]) begin
+        add_sat_val[Width-2:0] = {(Width-1){1'b1}};
+        add_sat_val[msb_indx]  = 1'b0; // Sign bit
+      end
+      else begin
+        add_sat_val[Width-2:0] = {(Width-1){1'b0}};
+        add_sat_val[msb_indx]  = 1'b1; // Sign bit
+      end
+      if (subtractor_result[msb_indx]) begin
+        sub_sat_val[Width-2:0] = {(Width-1){1'b1}};
+        sub_sat_val[msb_indx]  = 1'b0; // Sign bit
+      end
+      else begin
+        sub_sat_val[Width-2:0] = {(Width-1){1'b0}};
+        sub_sat_val[msb_indx]  = 1'b1; // Sign bit
+      end
+    end
+  end
+
 
   /////////////
   // Shifter //
@@ -211,13 +283,22 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
   always_comb begin : simd
     simd_result    = '0;
     result_valid_o = 1'b0;
+    fixedpoint_sat_o = 1'b0;
     if (operation_valid_i) begin
       // Valid result
       result_valid_o = 1'b1;
-
+     
       unique case (operation_i)
         VADD, VMACC, VMADD, VADC         : simd_result = adder_result[Width-1:0];
         VSUB, VRSUB, VNMSAC, VNMSUB, VSBC: simd_result = subtractor_result[Width-1:0];
+        VSADDU, VSADD                    : begin
+          simd_result = add_overflow ? add_sat_val : adder_result[Width-1:0];
+          fixedpoint_sat_o = add_overflow;
+        end
+        VSSUBU, VSSUB                    : begin
+          simd_result = sub_overflow ? sub_sat_val : subtractor_result[Width-1:0];
+          fixedpoint_sat_o = sub_overflow;
+        end
         VMIN, VMINU                      : simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) <= $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ? op_s1_i : op_s2_i;
         VMAX, VMAXU                      : simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) > $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ? op_s1_i : op_s2_i;
         VAND                             : simd_result = op_s1_i & op_s2_i;

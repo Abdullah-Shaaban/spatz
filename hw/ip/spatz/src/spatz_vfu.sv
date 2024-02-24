@@ -27,6 +27,8 @@ module spatz_vfu
     output logic             vfu_rsp_valid_o,
     input  logic             vfu_rsp_ready_i,
     output vfu_rsp_t         vfu_rsp_o,
+    // Notify the controller if fixed-point saturation occurred
+    output logic             vfu_fixedpoint_sat_o,
     // VRF
     output vrf_addr_t        vrf_waddr_o,
     output vrf_data_t        vrf_wdata_o,
@@ -291,6 +293,8 @@ module spatz_vfu
   logic [N_FU*ELEN-1:0]  ipu_result;
   logic [N_FU*ELENB-1:0] ipu_result_valid;
   logic [N_FU*ELENB-1:0] ipu_in_ready;
+  logic [N_IPU-1:0]      ipu_fixedpoint_sat;
+  assign vfu_fixedpoint_sat_o = |ipu_fixedpoint_sat;
 
   // FPU results
   logic [N_FU*ELEN-1:0]  fpu_result;
@@ -799,6 +803,7 @@ module spatz_vfu
       .result_o         (int_ipu_result[ipu*ELEN +: ELEN]                                                                ),
       .result_valid_o   (int_ipu_result_valid[ipu*ELENB +: ELENB]                                                        ),
       .result_ready_i   (int_ipu_result_ready                                                                            ),
+      .fixedpoint_sat_o (ipu_fixedpoint_sat[ipu]                                                           ),
       .tag_o            (int_ipu_result_tag[ipu]                                                                         ),
       .busy_o           (int_ipu_busy[ipu]                                                                               )
     );

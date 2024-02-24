@@ -87,6 +87,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
   logic     vfu_rsp_ready;
   logic     vfu_rsp_valid;
   vfu_rsp_t vfu_rsp;
+  logic     vfu_fixedpoint_sat;
 
   logic      vlsu_req_ready;
   logic      vlsu_rsp_valid;
@@ -254,6 +255,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vfu_rsp_valid_i  (vfu_rsp_valid   ),
     .vfu_rsp_ready_o  (vfu_rsp_ready   ),
     .vfu_rsp_i        (vfu_rsp         ),
+    .vfu_fixedpoint_sat_i(vfu_fixedpoint_sat),
     // VLSU
     .vlsu_req_ready_i (vlsu_req_ready  ),
     .vlsu_rsp_valid_i (vlsu_rsp_valid  ),
@@ -287,6 +289,7 @@ module spatz import spatz_pkg::*; import rvv_pkg::*; import fpnew_pkg::*; #(
     .vfu_rsp_valid_o  (vfu_rsp_valid                                           ),
     .vfu_rsp_ready_i  (vfu_rsp_ready                                           ),
     .vfu_rsp_o        (vfu_rsp                                                 ),
+    .vfu_fixedpoint_sat_o(vfu_fixedpoint_sat                         ),
     // VRF
     .vrf_waddr_o      (vrf_waddr[VFU_VD_WD]                                    ),
     .vrf_wdata_o      (vrf_wdata[VFU_VD_WD]                                    ),

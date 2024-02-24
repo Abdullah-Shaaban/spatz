@@ -121,7 +121,8 @@ package spatz_pkg;
     VCFG,
     // VCSR
     VCSR,
-    // TODO: remove FP instructions
+    // Fixed point instructions
+    VSADDU, VSADD, VSSUBU, VSSUB, VAADDU, VAADD, VASUBU, VASUB, VSMUL, VSSRL, VSSRA, VNCLIPU, VNCLIP,
     // Floating point instructions
     VFADD, VFSUB, VFMUL,
     VFMINMAX, VFSGNJ, VFCMP, VFCLASS,
@@ -151,6 +152,9 @@ package spatz_pkg;
     logic set_vstart;
     logic clear_vstart;
     logic reset_vstart;
+    logic write_vxsat;
+    logic set_vxsat;
+    logic clear_vxsat;
   } op_cfg_t;
 
   typedef struct packed {

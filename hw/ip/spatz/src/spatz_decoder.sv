@@ -335,7 +335,18 @@ module spatz_decoder
         riscv_instr::VSLIDE1UP_VX,
         riscv_instr::VSLIDEDOWN_VX,
         riscv_instr::VSLIDEDOWN_VI,
-        riscv_instr::VSLIDE1DOWN_VX: begin
+        riscv_instr::VSLIDE1DOWN_VX,
+        // Fixed-Point
+        riscv_instr::VSADD_VV,
+        riscv_instr::VSADD_VI,
+        riscv_instr::VSADD_VX,
+        riscv_instr::VSADDU_VV,
+        riscv_instr::VSADDU_VX,
+        riscv_instr::VSADDU_VI,
+        riscv_instr::VSSUB_VV,
+        riscv_instr::VSSUB_VX,
+        riscv_instr::VSSUBU_VV,
+        riscv_instr::VSSUBU_VX: begin
           automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
           automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
           automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
@@ -784,6 +795,30 @@ module spatz_decoder
               if (func3 == OPIVI) begin
                 spatz_req.rs1 = elen_t'(arith_s1);
               end
+            end
+
+            /////////////////
+            // Fixed Point //
+            /////////////////
+            
+            // Vector Single-Width Saturating Add and Subtract
+            riscv_instr::VSADDU_VV,
+            riscv_instr::VSADDU_VX,
+            riscv_instr::VSADDU_VI: begin
+              spatz_req.op = VSADDU;
+            end
+            riscv_instr::VSADD_VV,
+            riscv_instr::VSADD_VX,
+            riscv_instr::VSADD_VI: begin
+              spatz_req.op = VSADD;
+            end
+            riscv_instr::VSSUBU_VV,
+            riscv_instr::VSSUBU_VX: begin
+              spatz_req.op = VSSUBU;
+            end
+            riscv_instr::VSSUB_VV,
+            riscv_instr::VSSUB_VX: begin
+              spatz_req.op = VSSUB;
             end
 
             default: illegal_instr = 1'b1;
@@ -1676,22 +1711,30 @@ module spatz_decoder
           // Check type of CSR access (read/write)
           unique casez (decoder_req_i.instr)
             riscv_instr::CSRRW,
-            riscv_instr::CSRRWI:
+            riscv_instr::CSRRWI: begin
               if (csr_addr == riscv_instr::CSR_VSTART) begin
                 spatz_req.use_rd              = csr_rd != '0;
                 spatz_req.op_cfg.write_vstart = 1'b1;
               end
-
+              if (csr_addr == riscv_instr::CSR_VXSAT) begin
+                spatz_req.use_rd             = csr_rd != '0;
+                spatz_req.op_cfg.write_vxsat = 1'b1;
+              end
+            end
             riscv_instr::CSRRS,
-            riscv_instr::CSRRSI:
+            riscv_instr::CSRRSI: begin
               if (csr_addr == riscv_instr::CSR_VSTART)
                 spatz_req.op_cfg.set_vstart = csr_rs1 != '0;
-
+              if (csr_addr == riscv_instr::CSR_VXSAT)
+                spatz_req.op_cfg.set_vxsat = csr_rs1 != '0;            
+            end
             riscv_instr::CSRRC,
-            riscv_instr::CSRRCI:
+            riscv_instr::CSRRCI: begin
               if (csr_addr == riscv_instr::CSR_VSTART)
                 spatz_req.op_cfg.clear_vstart = csr_rs1 != '0;
-
+              if (csr_addr == riscv_instr::CSR_VXSAT)
+                spatz_req.op_cfg.clear_vxsat = csr_rs1 != '0;
+            end
             default:
               illegal_instr = 1'b1;
           endcase // CSR
