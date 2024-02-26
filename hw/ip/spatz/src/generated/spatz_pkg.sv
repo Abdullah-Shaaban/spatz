@@ -155,6 +155,9 @@ package spatz_pkg;
     logic write_vxsat;
     logic set_vxsat;
     logic clear_vxsat;
+    logic write_vxrm;
+    logic set_vxrm;
+    logic clear_vxrm;
   } op_cfg_t;
 
   typedef struct packed {
@@ -189,6 +192,14 @@ package spatz_pkg;
     // TODO: add rest of permutation
   } op_sld_t;
 
+  // Fixed-point rounding mode
+  typedef enum logic [1:0] {
+    RNU = 2'b00,  // round-to-nearest-up
+    RNE = 2'b01,  // round-to-nearest-even
+    RDN = 2'b10,  // round-down (truncate)
+    ROD = 2'b11   // round-to-odd
+  } fixpoint_rnd_e;
+
   // Result from decoder
   typedef struct packed {
     // Instruction ID
@@ -216,6 +227,9 @@ package spatz_pkg;
     fpnew_pkg::roundmode_e rm;
     // Format mode
     fpnew_pkg::fmt_mode_t fm;
+
+    // Fixed-point rounding mode
+    fixpoint_rnd_e vxrm;
 
     // Instruction operation
     op_e op;

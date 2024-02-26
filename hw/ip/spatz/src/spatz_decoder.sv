@@ -346,7 +346,15 @@ module spatz_decoder
         riscv_instr::VSSUB_VV,
         riscv_instr::VSSUB_VX,
         riscv_instr::VSSUBU_VV,
-        riscv_instr::VSSUBU_VX: begin
+        riscv_instr::VSSUBU_VX,
+        riscv_instr::VAADD_VV,
+        riscv_instr::VAADD_VX,
+        riscv_instr::VAADDU_VV,
+        riscv_instr::VAADDU_VX,
+        riscv_instr::VASUB_VV,
+        riscv_instr::VASUB_VX,
+        riscv_instr::VASUBU_VV,
+        riscv_instr::VASUBU_VX: begin
           automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
           automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
           automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
@@ -819,6 +827,23 @@ module spatz_decoder
             riscv_instr::VSSUB_VV,
             riscv_instr::VSSUB_VX: begin
               spatz_req.op = VSSUB;
+            end
+            // Vector Single-Width Averaging Add and Subtract
+            riscv_instr::VAADDU_VV,
+            riscv_instr::VAADDU_VX: begin
+              spatz_req.op = VAADDU;
+            end
+            riscv_instr::VAADD_VV,
+            riscv_instr::VAADD_VX: begin
+              spatz_req.op = VAADD;
+            end
+            riscv_instr::VASUBU_VV,
+            riscv_instr::VASUBU_VX: begin
+              spatz_req.op = VASUBU;
+            end
+            riscv_instr::VASUB_VV,
+            riscv_instr::VASUB_VX: begin
+              spatz_req.op = VASUB;
             end
 
             default: illegal_instr = 1'b1;
@@ -1720,13 +1745,19 @@ module spatz_decoder
                 spatz_req.use_rd             = csr_rd != '0;
                 spatz_req.op_cfg.write_vxsat = 1'b1;
               end
+              if (csr_addr == riscv_instr::CSR_VXRM) begin
+                spatz_req.use_rd            = csr_rd != '0;
+                spatz_req.op_cfg.write_vxrm = 1'b1;
+              end
             end
             riscv_instr::CSRRS,
             riscv_instr::CSRRSI: begin
               if (csr_addr == riscv_instr::CSR_VSTART)
                 spatz_req.op_cfg.set_vstart = csr_rs1 != '0;
               if (csr_addr == riscv_instr::CSR_VXSAT)
-                spatz_req.op_cfg.set_vxsat = csr_rs1 != '0;            
+                spatz_req.op_cfg.set_vxsat = csr_rs1 != '0;
+              if (csr_addr == riscv_instr::CSR_VXRM)
+                spatz_req.op_cfg.set_vxrm = csr_rs1 != '0;
             end
             riscv_instr::CSRRC,
             riscv_instr::CSRRCI: begin
@@ -1734,6 +1765,8 @@ module spatz_decoder
                 spatz_req.op_cfg.clear_vstart = csr_rs1 != '0;
               if (csr_addr == riscv_instr::CSR_VXSAT)
                 spatz_req.op_cfg.clear_vxsat = csr_rs1 != '0;
+              if (csr_addr == riscv_instr::CSR_VXRM)
+                spatz_req.op_cfg.clear_vxrm = csr_rs1 != '0;
             end
             default:
               illegal_instr = 1'b1;

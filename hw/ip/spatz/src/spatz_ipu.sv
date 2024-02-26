@@ -23,6 +23,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     input  tag_t   tag_i,
     input  elenb_t carry_i,
     input  vew_e   sew_i,
+    input  fixpoint_rnd_e vxrm_i,
     // Result Output
     output elenb_t be_o,
     output elen_t  result_o,
@@ -45,6 +46,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
   elen_t  op_s1, op_s2, op_d;
   elenb_t carry;
   vew_e   sew;
+  fixpoint_rnd_e vxrm;
 
   // Is the operation signed?
   logic is_signed;
@@ -78,10 +80,11 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     `FFL(carry, carry_i, operation_valid_i && operation_ready_o, '0)
     `FFL(sew, sew_i, operation_valid_i && operation_ready_o, rvv_pkg::EW_32)
     `FFL(tag_o, tag_i, operation_valid_i && operation_ready_o, '0)
+    `FFL(vxrm, vxrm_i, operation_valid_i && operation_ready_o, spatz_pkg::RNU)
 
     // Is the operation signed?
     logic is_signed_d;
-    assign is_signed_d = operation_i inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM, VSADD, VSSUB};
+    assign is_signed_d = operation_i inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM, VSADD, VSSUB, VAADD, VASUB};
     `FFL(is_signed, is_signed_d, operation_valid_i && operation_ready_o, 1'b0)
 
     // Is the operation signed and is this a VMULHSU?
@@ -99,9 +102,10 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     assign op_d  = op_d_i;
     assign carry = carry_i;
     assign sew   = sew_i;
+    assign vxrm  = vxrm_i;
 
     // Is the operation signed?
-    assign is_signed = operation inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM};
+    assign is_signed = operation inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM, VSADD, VSSUB, VAADD, VASUB};
 
     // Is the operation signed and is this a VMULHSU?
     assign is_signed_and_not_vmulhsu = is_signed && (operation != VMULHSU);
@@ -261,6 +265,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .is_signed_i      (is_signed                         ),
       .carry_i          (lane_signal_inp.ew8_carry[0]      ),
       .sew_i            (sew                               ),
+      .vxrm_i           (vxrm                              ),
       .result_o         (lane_signal_res.ew8_res[0]        ),
       .fixedpoint_sat_o (fixedpoint_sat[0]                 ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[0]),
@@ -280,6 +285,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .is_signed_i      (is_signed                         ),
       .carry_i          (lane_signal_inp.ew8_carry[1]      ),
       .sew_i            (sew                               ),
+      .vxrm_i           (vxrm                              ),
       .result_o         (lane_signal_res.ew8_res[1]        ),
       .fixedpoint_sat_o (fixedpoint_sat[1]                 ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[1]),
@@ -299,6 +305,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .is_signed_i      (is_signed                       ),
       .carry_i          (lane_signal_inp.ew16_carry      ),
       .sew_i            (sew                             ),
+      .vxrm_i           (vxrm                              ),
       .result_o         (lane_signal_res.ew16_res        ),
       .fixedpoint_sat_o (fixedpoint_sat[2]               ),
       .result_valid_o   (lane_signal_res_valid.ew16_valid),
@@ -318,6 +325,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .is_signed_i      (is_signed                       ),
       .carry_i          (lane_signal_inp.ew32_carry      ),
       .sew_i            (sew                             ),
+      .vxrm_i           (vxrm                              ),
       .result_o         (lane_signal_res.ew32_res        ),
       .fixedpoint_sat_o (fixedpoint_sat[3]               ),
       .result_valid_o   (lane_signal_res_valid.ew32_valid),
@@ -534,6 +542,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .is_signed_i      (is_signed                         ),
       .carry_i          (lane_signal_inp.ew8_carry[0]      ),
       .sew_i            (sew                               ),
+      .vxrm_i           (vxrm                              ),
       .result_o         (lane_signal_res.ew8_res[0]        ),
       .fixedpoint_sat_o (fixedpoint_sat[0]     ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[0]),
@@ -553,6 +562,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .is_signed_i      (is_signed                         ),
       .carry_i          (lane_signal_inp.ew8_carry[1]      ),
       .sew_i            (sew                               ),
+      .vxrm_i           (vxrm                              ),
       .result_o         (lane_signal_res.ew8_res[1]        ),
       .fixedpoint_sat_o (fixedpoint_sat[1]     ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[1]),
@@ -572,6 +582,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .is_signed_i      (is_signed                         ),
       .carry_i          (lane_signal_inp.ew8_carry[2]      ),
       .sew_i            (sew                               ),
+      .vxrm_i           (vxrm                              ),
       .result_o         (lane_signal_res.ew8_res[2]        ),
       .fixedpoint_sat_o (fixedpoint_sat[2]     ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[2]),
@@ -591,6 +602,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .is_signed_i      (is_signed                         ),
       .carry_i          (lane_signal_inp.ew8_carry[3]      ),
       .sew_i            (sew                               ),
+      .vxrm_i           (vxrm                              ),
       .result_o         (lane_signal_res.ew8_res[3]        ),
       .fixedpoint_sat_o (fixedpoint_sat[3]     ),
       .result_valid_o   (lane_signal_res_valid.ew8_valid[3]),
@@ -610,6 +622,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .is_signed_i      (is_signed                          ),
       .carry_i          (lane_signal_inp.ew16_carry[0]      ),
       .sew_i            (sew                                ),
+      .vxrm_i           (vxrm                              ),
       .result_o         (lane_signal_res.ew16_res[0]        ),
       .fixedpoint_sat_o (fixedpoint_sat[4]      ),
       .result_valid_o   (lane_signal_res_valid.ew16_valid[0]),
@@ -629,6 +642,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .is_signed_i      (is_signed                          ),
       .carry_i          (lane_signal_inp.ew16_carry[1]      ),
       .sew_i            (sew                                ),
+      .vxrm_i           (vxrm                              ),
       .result_o         (lane_signal_res.ew16_res[1]        ),
       .fixedpoint_sat_o (fixedpoint_sat[5]      ),
       .result_valid_o   (lane_signal_res_valid.ew16_valid[1]),
@@ -648,6 +662,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .is_signed_i      (is_signed                       ),
       .carry_i          (lane_signal_inp.ew32_carry      ),
       .sew_i            (sew                             ),
+      .vxrm_i           (vxrm                              ),
       .result_o         (lane_signal_res.ew32_res        ),
       .fixedpoint_sat_o (fixedpoint_sat[6]   ),
       .result_valid_o   (lane_signal_res_valid.ew32_valid),
@@ -667,6 +682,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
       .is_signed_i      (is_signed                       ),
       .carry_i          (lane_signal_inp.ew64_carry      ),
       .sew_i            (sew                             ),
+      .vxrm_i           (vxrm                              ),
       .result_o         (lane_signal_res.ew64_res        ),
       .fixedpoint_sat_o (fixedpoint_sat[7]   ),
       .result_valid_o   (lane_signal_res_valid.ew64_valid),

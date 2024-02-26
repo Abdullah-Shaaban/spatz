@@ -799,6 +799,7 @@ module spatz_vfu
       .tag_i            (input_tag                                                                                       ),
       .carry_i          ('0                                                                                              ),
       .sew_i            (sew                                                                                             ),
+      .vxrm_i           (spatz_req.vxrm                                                                                  ),
       .be_o             (/* Unused */                                                                                    ),
       .result_o         (int_ipu_result[ipu*ELEN +: ELEN]                                                                ),
       .result_valid_o   (int_ipu_result_valid[ipu*ELENB +: ELENB]                                                        ),

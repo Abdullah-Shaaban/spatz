@@ -80,11 +80,14 @@ module spatz_controller
   vtype_t vtype_d, vtype_q;
   // Only VXSAT[0] is meaningful
   logic  vxsat_d, vxsat_q;
+  // Only VXRM[1:0] is meaningful
+  logic [1:0] vxrm_d, vxrm_q;
 
   `FF(vstart_q, vstart_d, '0)
   `FF(vl_q, vl_d, '0)
   `FF(vtype_q, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
   `FF(vxsat_q, vxsat_d, '0)
+  `FF(vxrm_q, vxrm_d, '0)
 
   always_comb begin : proc_vcsr
     automatic logic [$clog2(MAXVL):0] vlmax = 0;
@@ -92,6 +95,7 @@ module spatz_controller
     vstart_d = vstart_q;
     vl_d     = vl_q;
     vtype_d  = vtype_q;
+    vxrm_d   = vxrm_q;
     // If at any time a fixed-point saturation occurs, we set the VXSAT[0] bit
     if (vfu_fixedpoint_sat_i) vxsat_d = 1'b1;
     else                      vxsat_d = vxsat_q;
@@ -118,6 +122,14 @@ module spatz_controller
           vxsat_d = vxsat_q | spatz_req.rs1[0];
         end else if (spatz_req.op_cfg.clear_vxsat) begin
           vxsat_d = vxsat_q & ~spatz_req.rs1[0];
+        end
+        // CSR instruction for VXRM
+        if (spatz_req.op_cfg.write_vxrm) begin
+          vxrm_d = spatz_req.rs1[1:0];
+        end else if (spatz_req.op_cfg.set_vxrm) begin
+          vxrm_d = vxrm_q | spatz_req.rs1[1:0];
+        end else if (spatz_req.op_cfg.clear_vxrm) begin
+          vxrm_d = vxrm_q & ~spatz_req.rs1[1:0];
         end
       end
 
@@ -209,9 +221,14 @@ module spatz_controller
   ////////////////////
 
   // Spatz request
-  spatz_req_t buffer_spatz_req;
+  spatz_req_t buffer_spatz_req, unbuffered_spatz_req;
   // Buffer state signals
   logic       req_buffer_ready, req_buffer_valid, req_buffer_pop;
+  // TODO: probably makes more sense to propagate VXRM's value directly to the VFU instead of using spatz_req
+  always_comb begin 
+    unbuffered_spatz_req = decoder_rsp.spatz_req;
+    unbuffered_spatz_req.vxrm = fixpoint_rnd_e'(vxrm_q); // Propagate rounding mode from VXRM
+  end
 
   // One element wide instruction buffer
   fall_through_register #(
@@ -223,7 +240,7 @@ module spatz_controller
     .testmode_i(1'b0                 ),
     .ready_o   (req_buffer_ready     ),
     .valid_o   (req_buffer_valid     ),
-    .data_i    (decoder_rsp.spatz_req),
+    .data_i    (unbuffered_spatz_req ),
     .valid_i   (decoder_rsp_valid    ),
     .data_o    (buffer_spatz_req     ),
     .ready_i   (req_buffer_pop       )
@@ -586,7 +603,7 @@ module spatz_controller
             riscv_instr::CSR_VTYPE : rsp_d.data = elen_t'(vtype_q);
             riscv_instr::CSR_VLENB : rsp_d.data = elen_t'(VLENB);
             riscv_instr::CSR_VXSAT : rsp_d.data = {{(ELEN-1){1'b0}},vxsat_q};
-            riscv_instr::CSR_VXRM  : rsp_d.data = '0;
+            riscv_instr::CSR_VXRM  : rsp_d.data = {{(ELEN-2){1'b0}},vxrm_q};
             riscv_instr::CSR_VCSR  : rsp_d.data = '0;
             default: rsp_d.data                 = '0;
           endcase

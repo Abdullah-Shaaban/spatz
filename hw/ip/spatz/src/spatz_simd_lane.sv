@@ -23,6 +23,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     input  logic  is_signed_i,
     input  logic  carry_i,
     input  vew_e  sew_i,
+    input  fixpoint_rnd_e vxrm_i,
     // Result Output
     output data_t result_o, 
     output logic  fixedpoint_sat_o,
@@ -166,6 +167,43 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     end
   end
 
+  // Fixed-point averaging and rounding
+  data_t avg_add_result, avg_sub_result;
+  always_comb begin
+    automatic logic r_add, r_sub; // Rounding increment value
+    // Do the shifting. The position of MSB depends on SEW value
+    avg_add_result = adder_result[Width:1];
+    avg_sub_result = subtractor_result[Width:1];
+    if (is_signed_i) begin // Signed shift
+      avg_add_result[msb_indx] = adder_result[msb_indx];
+      avg_sub_result[msb_indx] = subtractor_result[msb_indx];
+    end else begin
+      avg_add_result[msb_indx] = adder_result[msb_indx+1];
+      avg_sub_result[msb_indx] = subtractor_result[msb_indx+1];
+    end
+    // Do the rounding
+    case(vxrm_i)
+      RNU: begin
+        r_add = adder_result[0];
+        r_sub = subtractor_result[0];
+      end
+      RNE: begin
+        r_add = &adder_result[1:0];
+        r_sub = &subtractor_result[1:0];
+      end
+      RDN: begin
+        r_add = 1'b0;
+        r_sub = 1'b0;
+      end
+      ROD: begin 
+        r_add = !adder_result[1] & (adder_result[0]!=0);
+        r_sub = !subtractor_result[1] & (subtractor_result[0]!=0);
+      end
+      endcase
+    avg_add_result += r_add;
+    avg_sub_result += r_sub;
+  end
+
 
   /////////////
   // Shifter //
@@ -299,6 +337,8 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
           simd_result = sub_overflow ? sub_sat_val : subtractor_result[Width-1:0];
           fixedpoint_sat_o = sub_overflow;
         end
+        VAADDU, VAADD                    : simd_result = avg_add_result;
+        VASUBU, VASUB                    : simd_result = avg_sub_result;
         VMIN, VMINU                      : simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) <= $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ? op_s1_i : op_s2_i;
         VMAX, VMAXU                      : simd_result = $signed({op_s1_i[Width-1] & is_signed_i, op_s1_i}) > $signed({op_s2_i[Width-1] & is_signed_i, op_s2_i}) ? op_s1_i : op_s2_i;
         VAND                             : simd_result = op_s1_i & op_s2_i;
