@@ -354,7 +354,9 @@ module spatz_decoder
         riscv_instr::VASUB_VV,
         riscv_instr::VASUB_VX,
         riscv_instr::VASUBU_VV,
-        riscv_instr::VASUBU_VX: begin
+        riscv_instr::VASUBU_VX,
+        riscv_instr::VSMUL_VV,
+        riscv_instr::VSMUL_VX: begin
           automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
           automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
           automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
@@ -844,6 +846,11 @@ module spatz_decoder
             riscv_instr::VASUB_VV,
             riscv_instr::VASUB_VX: begin
               spatz_req.op = VASUB;
+            end
+            // Vector Single-Width Fractional Multiply with Rounding and Saturation
+            riscv_instr::VSMUL_VV,
+            riscv_instr::VSMUL_VX: begin
+              spatz_req.op = VSMUL;
             end
 
             default: illegal_instr = 1'b1;

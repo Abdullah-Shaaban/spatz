@@ -84,7 +84,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
     // Is the operation signed?
     logic is_signed_d;
-    assign is_signed_d = operation_i inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM, VSADD, VSSUB, VAADD, VASUB};
+    assign is_signed_d = operation_i inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM, VSADD, VSSUB, VAADD, VASUB, VSMUL};
     `FFL(is_signed, is_signed_d, operation_valid_i && operation_ready_o, 1'b0)
 
     // Is the operation signed and is this a VMULHSU?
@@ -105,7 +105,7 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     assign vxrm  = vxrm_i;
 
     // Is the operation signed?
-    assign is_signed = operation inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM, VSADD, VSSUB, VAADD, VASUB};
+    assign is_signed = operation inside {VMIN, VMAX, VMULH, VMULHSU, VDIV, VREM, VSADD, VSSUB, VAADD, VASUB, VSMUL};
 
     // Is the operation signed and is this a VMULHSU?
     assign is_signed_and_not_vmulhsu = is_signed && (operation != VMULHSU);

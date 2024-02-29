@@ -42,7 +42,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
   // Multiplier
   always_comb begin: mult
-    is_mult = operation_valid_i && (operation_i inside {VMACC, VNMSAC, VMADD, VNMSUB, VMUL, VMULH, VMULHU, VMULHSU});
+    is_mult = operation_valid_i && (operation_i inside {VMACC, VNMSAC, VMADD, VNMSUB, VMUL, VMULH, VMULHU, VMULHSU, VSMUL});
 
     // Mute the multiplier
     mult_result = '0;
@@ -99,7 +99,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
 
   // Fixed-point saturation
   logic add_overflow, sub_overflow;
-  logic [$clog2(ELEN)-1:0] msb_indx;
+  logic [$clog2(Width)-1:0] msb_indx;
   data_t add_sat_val, sub_sat_val;
 
   // Select sign bit index based on SEW
@@ -204,6 +204,77 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     avg_sub_result += r_sub;
   end
 
+  /////////////////////////////////////////////////////
+  // Fixed-point fractional multiply with saturation //
+  /////////////////////////////////////////////////////
+  data_t vsmul_result;
+  logic vsmul_sat;
+  // The fowllowing 2 signals are used to select the appropriate bit range to do rounding for different SEW values
+  logic [(Width-1)-2:0] rne_range; 
+  logic [(Width-1)-1:0] rod_range;
+  if (Width == 64) begin
+    always_comb begin
+      rne_range = { {(7*Width/8){1'b0}},mult_result[(Width/8-1)-2:0]};
+      rod_range = { {(7*Width/8){1'b0}},mult_result[(Width/8-1)-1:0]};
+      case (sew_i)
+        rvv_pkg::EW_16: begin 
+          rne_range[(Width/4-1)-2:0] = mult_result[(Width/4-1)-2:0];
+          rod_range[(Width/4-1)-1:0] = mult_result[(Width/4-1)-1:0];
+        end
+        rvv_pkg::EW_32: begin 
+          rne_range[(Width/2-1)-2:0] = mult_result[(Width/2-1)-2:0];
+          rod_range[(Width/2-1)-1:0] = mult_result[(Width/2-1)-1:0];
+        end
+        rvv_pkg::EW_64: begin 
+          rne_range[(Width-1)-2:0] = mult_result[(Width-1)-2:0];
+          rod_range[(Width-1)-1:0] = mult_result[(Width-1)-1:0];
+        end
+      endcase
+    end
+  end else if (Width == 32) begin
+    always_comb begin
+      rne_range = {{(3*Width/4){1'b0}}, mult_result[(Width/4-1)-2:0]};
+      rod_range = {{(3*Width/4){1'b0}}, mult_result[(Width/4-1)-1:0]};
+      case (sew_i)
+        rvv_pkg::EW_16: begin 
+          rne_range[(Width/2-1)-2:0] = mult_result[(Width/2-1)-2:0];
+          rod_range[(Width/2-1)-1:0] = mult_result[(Width/2-1)-1:0];
+        end
+        rvv_pkg::EW_32: begin
+          rne_range = mult_result[(Width-1)-2:0];
+          rod_range = mult_result[(Width-1)-1:0];
+        end
+      endcase
+    end
+  end else if (Width == 16) begin
+    always_comb begin
+      rne_range = {{(Width/2){1'b0}}, mult_result[(Width/2-1)-2:0]};
+      rod_range = {{(Width/2){1'b0}}, mult_result[(Width/2-1)-1:0]};
+      if (sew_i == rvv_pkg::EW_16) begin
+          rne_range = mult_result[(Width-1)-2:0];
+          rod_range = mult_result[(Width-1)-1:0];
+      end
+    end
+  end else if (Width == 8) begin
+    assign rne_range = mult_result[(Width-1)-2:0];
+    assign rod_range = mult_result[(Width-1)-1:0];
+  end
+
+  always_comb begin
+    automatic logic r; // Rounding increment value
+    case(vxrm_i)
+        RNU: r = mult_result[msb_indx-1];
+        // RNE: r = mult_result[msb_indx-1] & (rne_range | mult_result[msb_indx]);
+        RNE: r = mult_result[msb_indx-1] & (rne_range!=0 | mult_result[msb_indx]);
+        RDN: r = 1'b0;
+        // ROD: r = !mult_result[msb_indx] & (rod_range);
+        ROD: r = !mult_result[msb_indx] & (rod_range!=0);
+    endcase
+    // Shift (signed only) and round
+    vsmul_result = $signed(mult_result)>>>(msb_indx) + r;
+    // Saturation: overflow happens when the shifted result have a different sign than the original result
+    vsmul_sat = mult_result[2*msb_indx+1] ^ mult_result[2*msb_indx];
+  end
 
   /////////////
   // Shifter //
@@ -354,6 +425,15 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
           for (int i = 0; i < $clog2(Width/8); i++)
             if (sew_i == rvv_pkg::vew_e'(i))
               simd_result = mult_result[8*(2**i) +: Width];
+        end
+        VSMUL                   : begin
+          if (vsmul_sat) begin
+            simd_result = '1;
+            simd_result[msb_indx] = 1'b0; // Sign bit
+          end else begin
+            simd_result = vsmul_result;
+          end
+          fixedpoint_sat_o = vsmul_sat;
         end
         VMADC                   : simd_result = Width'(adder_result[Width]);
         VMSBC                   : simd_result = Width'(subtractor_result[Width]);
