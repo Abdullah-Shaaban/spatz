@@ -356,7 +356,13 @@ module spatz_decoder
         riscv_instr::VASUBU_VV,
         riscv_instr::VASUBU_VX,
         riscv_instr::VSMUL_VV,
-        riscv_instr::VSMUL_VX: begin
+        riscv_instr::VSMUL_VX,
+        riscv_instr::VSSRL_VV,
+        riscv_instr::VSSRL_VX,
+        riscv_instr::VSSRL_VI,
+        riscv_instr::VSSRA_VV,
+        riscv_instr::VSSRA_VX,
+        riscv_instr::VSSRA_VI: begin
           automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
           automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
           automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
@@ -851,6 +857,23 @@ module spatz_decoder
             riscv_instr::VSMUL_VV,
             riscv_instr::VSMUL_VX: begin
               spatz_req.op = VSMUL;
+            end
+            // Vector Single-Width Scaling Shift Instructions
+            riscv_instr::VSSRL_VV,
+            riscv_instr::VSSRL_VX,
+            riscv_instr::VSSRL_VI: begin
+              spatz_req.op = VSSRL;
+              if (func3 == OPIVI) begin
+                spatz_req.rs1 = elen_t'(arith_s1);
+              end
+            end
+            riscv_instr::VSSRA_VV,
+            riscv_instr::VSSRA_VX,
+            riscv_instr::VSSRA_VI: begin
+              spatz_req.op = VSSRA;
+              if (func3 == OPIVI) begin
+                spatz_req.rs1 = elen_t'(arith_s1);
+              end
             end
 
             default: illegal_instr = 1'b1;

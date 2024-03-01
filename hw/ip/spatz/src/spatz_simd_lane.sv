@@ -8,7 +8,7 @@
 // element width.
 
 module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
-    parameter int  unsigned Width  = 8,
+    parameter int  unsigned Width  = 16,
     // Derived parameters. Do not change!
     parameter type          data_t = logic [Width-1:0]
   ) (
@@ -204,82 +204,10 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     avg_sub_result += r_sub;
   end
 
-  /////////////////////////////////////////////////////
-  // Fixed-point fractional multiply with saturation //
-  /////////////////////////////////////////////////////
-  data_t vsmul_result;
-  logic vsmul_sat;
-  // The fowllowing 2 signals are used to select the appropriate bit range to do rounding for different SEW values
-  logic [(Width-1)-2:0] rne_range; 
-  logic [(Width-1)-1:0] rod_range;
-  if (Width == 64) begin
-    always_comb begin
-      rne_range = { {(7*Width/8){1'b0}},mult_result[(Width/8-1)-2:0]};
-      rod_range = { {(7*Width/8){1'b0}},mult_result[(Width/8-1)-1:0]};
-      case (sew_i)
-        rvv_pkg::EW_16: begin 
-          rne_range[(Width/4-1)-2:0] = mult_result[(Width/4-1)-2:0];
-          rod_range[(Width/4-1)-1:0] = mult_result[(Width/4-1)-1:0];
-        end
-        rvv_pkg::EW_32: begin 
-          rne_range[(Width/2-1)-2:0] = mult_result[(Width/2-1)-2:0];
-          rod_range[(Width/2-1)-1:0] = mult_result[(Width/2-1)-1:0];
-        end
-        rvv_pkg::EW_64: begin 
-          rne_range[(Width-1)-2:0] = mult_result[(Width-1)-2:0];
-          rod_range[(Width-1)-1:0] = mult_result[(Width-1)-1:0];
-        end
-      endcase
-    end
-  end else if (Width == 32) begin
-    always_comb begin
-      rne_range = {{(3*Width/4){1'b0}}, mult_result[(Width/4-1)-2:0]};
-      rod_range = {{(3*Width/4){1'b0}}, mult_result[(Width/4-1)-1:0]};
-      case (sew_i)
-        rvv_pkg::EW_16: begin 
-          rne_range[(Width/2-1)-2:0] = mult_result[(Width/2-1)-2:0];
-          rod_range[(Width/2-1)-1:0] = mult_result[(Width/2-1)-1:0];
-        end
-        rvv_pkg::EW_32: begin
-          rne_range = mult_result[(Width-1)-2:0];
-          rod_range = mult_result[(Width-1)-1:0];
-        end
-      endcase
-    end
-  end else if (Width == 16) begin
-    always_comb begin
-      rne_range = {{(Width/2){1'b0}}, mult_result[(Width/2-1)-2:0]};
-      rod_range = {{(Width/2){1'b0}}, mult_result[(Width/2-1)-1:0]};
-      if (sew_i == rvv_pkg::EW_16) begin
-          rne_range = mult_result[(Width-1)-2:0];
-          rod_range = mult_result[(Width-1)-1:0];
-      end
-    end
-  end else if (Width == 8) begin
-    assign rne_range = mult_result[(Width-1)-2:0];
-    assign rod_range = mult_result[(Width-1)-1:0];
-  end
-
-  always_comb begin
-    automatic logic r; // Rounding increment value
-    case(vxrm_i)
-        RNU: r = mult_result[msb_indx-1];
-        // RNE: r = mult_result[msb_indx-1] & (rne_range | mult_result[msb_indx]);
-        RNE: r = mult_result[msb_indx-1] & (rne_range!=0 | mult_result[msb_indx]);
-        RDN: r = 1'b0;
-        // ROD: r = !mult_result[msb_indx] & (rod_range);
-        ROD: r = !mult_result[msb_indx] & (rod_range!=0);
-    endcase
-    // Shift (signed only) and round
-    vsmul_result = $signed(mult_result)>>>(msb_indx) + r;
-    // Saturation: overflow happens when the shifted result have a different sign than the original result
-    vsmul_sat = mult_result[2*msb_indx+1] ^ mult_result[2*msb_indx];
-  end
-
   /////////////
   // Shifter //
   /////////////
-
+  data_t vsrl_result, vsra_result;
   logic [$clog2(Width)-1:0] shift_amount;
   logic [Width-1:0]         shift_operand;
   if (Width >= 64) begin : gen_shift_operands_64
@@ -344,6 +272,44 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
       shift_amount  = op_s1_i[2:0];
       shift_operand = op_s2_i[7:0];
     end
+  end
+  assign vsrl_result = shift_operand >> shift_amount;
+  assign vsra_result = $signed(shift_operand) >>> shift_amount;
+  
+  
+
+  ////////////////////////////////////////////////
+  // Rounding logic for VSSRL, VSSRA, and VSMUL //
+  ////////////////////////////////////////////////
+  // Rounding increment value
+  logic r;
+  // A lookup table of masks to select the "shifted out bits" for rounding
+  data_t [Width-1:0] round_masks;
+  for (genvar i = 0; i < Width; i++) begin
+    assign round_masks[i] = (i == 0) ? '0 : (round_masks[i-1] << 1) | Width'(1'b1);
+  end
+  always_comb begin
+    logic [Width-1:0] v;  // Value to be rounded
+    logic [$clog2(Width)-1:0] d;  // Shift amount
+    logic shifted_msb; // MSB of the shifted-out bits
+    logic result_lsb; // LSB of the result after shifting
+    logic [Width-2:0] shifted_out_bits; // Zero extended
+    if (operation_i == VSMUL) begin
+      v = mult_result[Width-1:0];
+      d = msb_indx; // SEW-1
+    end else begin
+      v = shift_operand;
+      d = shift_amount;
+    end
+    result_lsb       = v[d];
+    shifted_msb      = v[d-1];
+    shifted_out_bits = v[Width-2:0] & round_masks[d];
+    case(vxrm_i)
+      RNU: r = shifted_msb;
+      RNE: r = shifted_msb & ((shifted_out_bits!=0) | result_lsb);
+      RDN: r = 1'b0;
+      ROD: r = !result_lsb & (shifted_out_bits!=0);
+    endcase
   end
 
   /////////////
@@ -416,8 +382,10 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
         VOR                              : simd_result = op_s1_i | op_s2_i;
         VXOR                             : simd_result = op_s1_i ^ op_s2_i;
         VSLL                             : simd_result = shift_operand << shift_amount;
-        VSRL                             : simd_result = shift_operand >> shift_amount;
-        VSRA                             : simd_result = $signed(shift_operand) >>> shift_amount;
+        VSRL                             : simd_result = vsrl_result;
+        VSRA                             : simd_result = vsra_result;
+        VSSRL                            : simd_result = vsrl_result + r;
+        VSSRA                            : simd_result = vsra_result + r;
         // TODO: Change selection when SEW does not equal Width
         VMUL                             : simd_result = mult_result[Width-1:0];
         VMULH, VMULHU, VMULHSU           : begin
@@ -426,14 +394,14 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
             if (sew_i == rvv_pkg::vew_e'(i))
               simd_result = mult_result[8*(2**i) +: Width];
         end
-        VSMUL                   : begin
-          if (vsmul_sat) begin
+        VSMUL: begin
+          fixedpoint_sat_o = mult_result[2*msb_indx+1] ^ mult_result[2*msb_indx];
+          if (fixedpoint_sat_o) begin
             simd_result = '1;
             simd_result[msb_indx] = 1'b0; // Sign bit
           end else begin
-            simd_result = vsmul_result;
+            simd_result = (mult_result>>msb_indx) + r;
           end
-          fixedpoint_sat_o = vsmul_sat;
         end
         VMADC                   : simd_result = Width'(adder_result[Width]);
         VMSBC                   : simd_result = Width'(subtractor_result[Width]);
