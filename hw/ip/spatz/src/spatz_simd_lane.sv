@@ -147,7 +147,6 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     add_sat_val = {(Width){1'b1}};
     sub_sat_val = {(Width){1'b0}};
     if (is_signed_i) begin
-      // Saturation is needed when the result overflows. Therefore, the sign of the saturation value is opposite to the sign of the result.
       if (adder_result[msb_indx]) begin
         add_sat_val[Width-2:0] = {(Width-1){1'b1}};
         add_sat_val[msb_indx]  = 1'b0; // Sign bit
@@ -207,7 +206,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
   /////////////
   // Shifter //
   /////////////
-  data_t vsrl_result, vsra_result;
+  data_t vsrl_result, vsra_result, vssrl_result, vssra_result;
   logic [$clog2(Width)-1:0] shift_amount;
   logic [Width-1:0]         shift_operand;
   if (Width >= 64) begin : gen_shift_operands_64
@@ -312,6 +311,87 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     endcase
   end
 
+  // Fixed-Point Scaling Shift
+  assign vssra_result = vsra_result + r;
+  assign vssrl_result = vsrl_result + r;
+
+  // Saturation for Fixed-point Narrowing Clip
+  logic clip_sat;
+  if (Width == 64) begin
+    always_comb begin
+      unique case (sew_i)
+        rvv_pkg::EW_64: begin
+          if (operation_i == VNCLIPU) begin
+            clip_sat = |vssrl_result[63:48];  // Treat the shifted, rounded result as unsigned
+          end else begin
+            if (shift_operand[Width-1])
+              clip_sat = !(&vssra_result[62:48]);
+            else
+              clip_sat = |vssrl_result[62:48];
+          end
+        end
+        rvv_pkg::EW_32: begin
+          if (operation_i == VNCLIPU) begin
+            clip_sat = |vssrl_result[31:16];
+          end else begin
+            if (shift_operand[Width-1])
+              clip_sat = !(&vssra_result[30:16]);
+            else
+              clip_sat = |vssrl_result[30:16];
+          end
+        end
+        default: begin
+          if (operation_i == VNCLIPU) begin
+            clip_sat = |vssrl_result[15:8];
+          end else begin
+            if (shift_operand[Width-1])
+              clip_sat = !(&vssra_result[14:8]);
+            else
+              clip_sat = |vssrl_result[14:8];
+          end
+        end
+      endcase
+    end
+  end else if (Width == 32) begin
+    always_comb begin
+      unique case (sew_i)
+        rvv_pkg::EW_32: begin
+          if (operation_i == VNCLIPU) begin
+            clip_sat = |vssrl_result[31:16];
+          end else begin
+            if (shift_operand[Width-1])
+              clip_sat = !(&vssra_result[30:16]);
+            else
+              clip_sat = |vssrl_result[30:16];
+          end
+        end
+        default: begin
+          if (operation_i == VNCLIPU) begin
+            clip_sat = |vssrl_result[15:8];
+          end else begin
+            if (shift_operand[Width-1])
+              clip_sat = !(&vssra_result[14:8]);
+            else
+              clip_sat = |vssrl_result[14:8];
+          end
+        end
+      endcase
+    end
+  end else if (Width == 16) begin
+    always_comb begin
+      if (operation_i == VNCLIPU) begin
+        clip_sat = |vssrl_result[15:8];
+      end else begin
+        if (shift_operand[Width-1])
+          clip_sat = !(&vssra_result[14:8]);
+        else
+          clip_sat = |vssrl_result[14:8];
+      end
+    end
+  end else if (Width == 8) begin
+    assign clip_sat = 0;
+  end
+
   /////////////
   // Divider //
   /////////////
@@ -384,8 +464,29 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
         VSLL                             : simd_result = shift_operand << shift_amount;
         VSRL                             : simd_result = vsrl_result;
         VSRA                             : simd_result = vsra_result;
-        VSSRL                            : simd_result = vsrl_result + r;
-        VSSRA                            : simd_result = vsra_result + r;
+        VSSRL                            : simd_result = vssrl_result;
+        VSSRA                            : simd_result = vssra_result;
+        VNCLIP                           : begin
+          fixedpoint_sat_o = clip_sat;
+          if (!clip_sat) begin
+            simd_result = vssra_result;
+          end else begin
+            if (shift_operand[Width-1]) begin
+              simd_result = '0;
+              simd_result[msb_indx/2] = 1'b1; // Narrowing: divide index by 2
+            end else begin
+              simd_result = '1;
+              simd_result[msb_indx/2] = 1'b0;
+            end
+          end
+        end
+        VNCLIPU                          : begin
+          fixedpoint_sat_o = clip_sat;
+          if (!clip_sat)
+            simd_result = vssrl_result;
+          else 
+            simd_result = '1;
+        end
         // TODO: Change selection when SEW does not equal Width
         VMUL                             : simd_result = mult_result[Width-1:0];
         VMULH, VMULHU, VMULHSU           : begin

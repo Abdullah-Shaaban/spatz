@@ -362,7 +362,13 @@ module spatz_decoder
         riscv_instr::VSSRL_VI,
         riscv_instr::VSSRA_VV,
         riscv_instr::VSSRA_VX,
-        riscv_instr::VSSRA_VI: begin
+        riscv_instr::VSSRA_VI,
+        riscv_instr::VNCLIP_WV,
+        riscv_instr::VNCLIP_WX,
+        riscv_instr::VNCLIP_WI,
+        riscv_instr::VNCLIPU_WV,
+        riscv_instr::VNCLIPU_WX,
+        riscv_instr::VNCLIPU_WI: begin
           automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
           automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
           automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
@@ -874,6 +880,21 @@ module spatz_decoder
               if (func3 == OPIVI) begin
                 spatz_req.rs1 = elen_t'(arith_s1);
               end
+            end
+            // Vector Narrowing Clip Instructions
+            riscv_instr::VNCLIP_WV,
+            riscv_instr::VNCLIP_WX,
+            riscv_instr::VNCLIP_WI: begin
+              spatz_req.op = VNCLIP;
+              spatz_req.op_arith.widen_vs1 = 1'b1;
+              spatz_req.op_arith.is_narrowing = 1'b1;
+            end
+            riscv_instr::VNCLIPU_WV,
+            riscv_instr::VNCLIPU_WX,
+            riscv_instr::VNCLIPU_WI: begin
+              spatz_req.op = VNCLIPU;
+              spatz_req.op_arith.widen_vs1 = 1'b1;
+              spatz_req.op_arith.is_narrowing = 1'b1;
             end
 
             default: illegal_instr = 1'b1;

@@ -228,18 +228,21 @@ module spatz_ipu import spatz_pkg::*; import rvv_pkg::vew_e; #(
     ///////////////
 
     // Collect results from the SIMD lanes
+    // A narrowing instruction collects results with half the element width
     always_comb begin : collector
       unique case (sew)
         rvv_pkg::EW_8 : begin
-          result_o       = {lane_signal_res.ew32_res[7:0], lane_signal_res.ew16_res[7:0], lane_signal_res.ew8_res[1], lane_signal_res.ew8_res[0]};
+          result_o       = {lane_signal_res.ew32_res[7:0], lane_signal_res.ew16_res[7:0], lane_signal_res.ew8_res[1], lane_signal_res.ew8_res[0]}; 
           result_valid_o = {lane_signal_res_valid.ew32_valid, lane_signal_res_valid.ew16_valid, lane_signal_res_valid.ew8_valid};
         end
         rvv_pkg::EW_16: begin
-          result_o       = {lane_signal_res.ew32_res[15:0], lane_signal_res.ew16_res};
+          if (tag_o.narrowing == 1'b1) result_o = {16'd0, lane_signal_res.ew32_res[7:0], lane_signal_res.ew16_res[7:0]};
+          else                         result_o = {lane_signal_res.ew32_res[15:0], lane_signal_res.ew16_res};
           result_valid_o = {{2{lane_signal_res_valid.ew32_valid}}, {2{lane_signal_res_valid.ew16_valid}}};
         end
         default: begin
-          result_o       = lane_signal_res.ew32_res;
+          if (tag_o.narrowing == 1'b1) result_o = {16'd0, lane_signal_res.ew32_res[15:0]};
+          else                         result_o = lane_signal_res.ew32_res;
           result_valid_o = {4{lane_signal_res_valid.ew32_valid}};
         end
       endcase
