@@ -413,17 +413,18 @@ module spatz_vfu
           end
           EW_32: begin
             reduction_d[0] = $unsigned(vrf_rdata_i[0][31:0]);
-            // TODO: fix this 
-            //      (Error: Range of part-select [-1:0] into 'reduction_pointer_q' [7:0] is reversed.)
-            //      (Warning: MSB -1 of part-select into 'reduction_pointer_q' is out of bounds)
-            reduction_d[1] = '0;
-            // reduction_d[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
+          `ifdef CVE2V_SYNTH
+              reduction_d[1] = $unsigned(vrf_rdata_i[1][0]);
+          `else
+              reduction_d[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
+          `endif
           end
           default: begin
           `ifdef MEMPOOL_SPATZ
             reduction_d = '0;
+          `elsif CVE2V_SYNTH
+            reduction_d = '0;
           `else
-            // TODO: disable 64-bit support properly for 32-bit Spatz configuration
             if (MAXEW == EW_64) begin
               reduction_d[0] = $unsigned(vrf_rdata_i[0][63:0]);
               reduction_d[1] = $unsigned(vrf_rdata_i[1][64*reduction_pointer_q[idx_width(N_FU*ELENB)-4:0] +: 64]);
@@ -461,17 +462,18 @@ module spatz_vfu
           end
           EW_32: begin
             reduction_d[0] = $unsigned(result[31:0]);
-            // TODO: fix this 
-            //      (Error: Range of part-select [-1:0] into 'reduction_pointer_q' [7:0] is reversed.)
-            //      (Warning: MSB -1 of part-select into 'reduction_pointer_q' is out of bounds)
-            reduction_d[1] = '0;
-            // reduction_d[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
+            `ifdef CVE2V_SYNTH
+              reduction_d[1] = $unsigned(vrf_rdata_i[1][0]);
+            `else
+              reduction_d[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
+            `endif
           end
           default: begin
           `ifdef MEMPOOL_SPATZ
             reduction_d = '0;
+          `elsif CVE2V_SYNTH
+            reduction_d = '0;
           `else
-            // TODO: disable 64-bit support correctly for 32-bit Spatz configuration
             if (MAXEW == EW_64) begin
               reduction_d[0] = $unsigned(result[63:0]);
               reduction_d[1] = $unsigned(vrf_rdata_i[1][64*reduction_pointer_q[idx_width(N_FU*ELENB)-4:0] +: 64]);
