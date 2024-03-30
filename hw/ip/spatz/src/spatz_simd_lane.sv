@@ -103,6 +103,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
   data_t add_sat_val, sub_sat_val;
 
   // Select sign bit index based on SEW
+  // NOTE: not sure if Synth tool understands that msb_indx takes only up to 4 different values. If not, a Width-bit MUX will be generated when msb_indx is used!
   if (Width == 64) begin
     always_comb begin
       unique case (sew_i)
@@ -173,6 +174,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
     // Do the shifting. The position of MSB depends on SEW value
     avg_add_result = adder_result[Width:1];
     avg_sub_result = subtractor_result[Width:1];
+    // TODO: using msb_indx is not necessary for the RHS here. A normal signed/unsigned shift by 1 will work.
     if (is_signed_i) begin // Signed shift
       avg_add_result[msb_indx] = adder_result[msb_indx];
       avg_sub_result[msb_indx] = subtractor_result[msb_indx];
@@ -501,6 +503,7 @@ module spatz_simd_lane import spatz_pkg::*; import rvv_pkg::vew_e; #(
             simd_result = '1;
             simd_result[msb_indx] = 1'b0; // Sign bit
           end else begin
+            // TODO: msb_indx can take only up to 4 different values, but the synthesis tool may not understand this and it produces a shifter instead.
             simd_result = (mult_result>>msb_indx) + r;
           end
         end
