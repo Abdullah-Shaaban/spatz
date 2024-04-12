@@ -127,9 +127,20 @@ module spatz_vfu
   // Do we have the reduction operand?
   logic reduction_operand_ready_d, reduction_operand_ready_q;
 
+  // Reduction state
+  typedef enum logic [2:0] {
+    Reduction_NormalExecution,
+    Reduction_Wait,
+    Reduction_Init,
+    Reduction_Reduce,
+    Reduction_WriteBack
+   } reduction_state_t;
+   reduction_state_t reduction_state_d, reduction_state_q;
+  `FF(reduction_state_q, reduction_state_d, Reduction_NormalExecution)
+  
   // Are the VFU operands ready?
   logic op1_is_ready, op2_is_ready, op3_is_ready, operands_ready;
-  assign op1_is_ready   = spatz_req_valid && ((!spatz_req.op_arith.is_reduction && (!spatz_req.use_vs1 || vrf_rvalid_i[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
+  assign op1_is_ready   = spatz_req_valid && ((!(spatz_req.op_arith.is_reduction && reduction_state_q!=Reduction_Init) && (!spatz_req.use_vs1 || vrf_rvalid_i[1])) || (spatz_req.op_arith.is_reduction && reduction_operand_ready_q));
   assign op2_is_ready   = spatz_req_valid && ((!spatz_req.use_vs2 || vrf_rvalid_i[0]) || spatz_req.op_arith.is_reduction);
   assign op3_is_ready   = spatz_req_valid && (!spatz_req.vd_is_src || vrf_rvalid_i[2]);
   assign operands_ready = op1_is_ready && op2_is_ready && op3_is_ready && (!spatz_req.op_arith.is_scalar || vfu_rsp_ready_i) && !stall;
@@ -164,17 +175,6 @@ module spatz_vfu
 
   // Is this the last request?
   logic last_request;
-
-  // Reduction state
-  typedef enum logic [2:0] {
-    Reduction_NormalExecution,
-    Reduction_Wait,
-    Reduction_Init,
-    Reduction_Reduce,
-    Reduction_WriteBack
-   } reduction_state_t;
-   reduction_state_t reduction_state_d, reduction_state_q;
-  `FF(reduction_state_q, reduction_state_d, Reduction_NormalExecution)
 
   // Is the reduction done?
   logic reduction_done;
@@ -308,7 +308,7 @@ module spatz_vfu
     if (spatz_req.op_arith.is_scalar)
       operand1 = {1*N_FU{spatz_req.rs1}};
     else if (spatz_req.use_vs1)
-      operand1 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[1]) : vrf_rdata_i[1];
+      operand1 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_d[1]) : vrf_rdata_i[1];
     else begin
       // Replicate scalar operands
       unique case (spatz_req.op == VSDOTP ? vew_e'(spatz_req.vtype.vsew + 1) : spatz_req.vtype.vsew)
@@ -320,7 +320,7 @@ module spatz_vfu
     end
 
     if ((!spatz_req.op_arith.is_scalar || spatz_req.op == VADD) && spatz_req.use_vs2)
-      operand2 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_q[0]) : vrf_rdata_i[0];
+      operand2 = spatz_req.op_arith.is_reduction ? $unsigned(reduction_d[0]) : vrf_rdata_i[0];
     else
       // Replicate scalar operands
       unique case (spatz_req.op == VSDOTP ? vew_e'(spatz_req.vtype.vsew + 1) : spatz_req.vtype.vsew)
@@ -354,6 +354,10 @@ module spatz_vfu
   logic [1:0] reduction_operand_request;
 
   always_comb begin: proc_reduction
+    automatic logic [idx_width(N_FU*ELENB)-1:0] pnt;
+    // Request next word
+    pnt = (reduction_pointer_q + 1) << int'(spatz_req.vtype.vsew);
+
     // Maintain state
     reduction_state_d   = reduction_state_q;
     reduction_pointer_d = reduction_pointer_q;
@@ -414,7 +418,7 @@ module spatz_vfu
           EW_32: begin
             reduction_d[0] = $unsigned(vrf_rdata_i[0][31:0]);
           `ifdef CVE2V_SYNTH
-              reduction_d[1] = $unsigned(vrf_rdata_i[1][0]);
+              reduction_d[1] = $unsigned(vrf_rdata_i[1][0 +: 32]);
           `else
               reduction_d[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
           `endif
@@ -435,14 +439,14 @@ module spatz_vfu
         // verilator lint_on SELRANGE
 
         if (vrf_rvalid_i[0] && vrf_rvalid_i[1]) begin
-          automatic logic [idx_width(N_FU*ELENB)-1:0] pnt;
+          // automatic logic [idx_width(N_FU*ELENB)-1:0] pnt;
 
           reduction_operand_ready_d = 1'b1;
           reduction_pointer_d       = reduction_pointer_q + 1;
           reduction_state_d         = Reduction_Reduce;
 
           // Request next word
-          pnt = reduction_pointer_d << int'(spatz_req.vtype.vsew);
+          // pnt = reduction_pointer_d << int'(spatz_req.vtype.vsew);
           if (!(|pnt))
             word_issued = 1'b1;
         end
@@ -463,7 +467,7 @@ module spatz_vfu
           EW_32: begin
             reduction_d[0] = $unsigned(result[31:0]);
             `ifdef CVE2V_SYNTH
-              reduction_d[1] = $unsigned(vrf_rdata_i[1][0]);
+              reduction_d[1] = $unsigned(vrf_rdata_i[1][0 +: 32]);
             `else
               reduction_d[1] = $unsigned(vrf_rdata_i[1][32*reduction_pointer_q[idx_width(N_FU*ELENB)-3:0] +: 32]);
             `endif
@@ -487,7 +491,7 @@ module spatz_vfu
         if (result_valid[0]) begin
           // Did we get an operand?
           if (vrf_rvalid_i[1]) begin
-            automatic logic [idx_width(N_FU*ELENB)-1:0] pnt;
+            // automatic logic [idx_width(N_FU*ELENB)-1:0] pnt;
 
             // Bump pointer
             reduction_pointer_d = reduction_pointer_q + 1;
@@ -499,7 +503,7 @@ module spatz_vfu
             reduction_operand_ready_d = 1'b1;
 
             // Request next word
-            pnt = reduction_pointer_d << int'(spatz_req.vtype.vsew);
+            // pnt = reduction_pointer_d << int'(spatz_req.vtype.vsew);
             if (!(|pnt))
               word_issued = 1'b1;
           end
