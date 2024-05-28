@@ -435,14 +435,20 @@ module spatz_vlsu
     assign idx_offset = mem_idx_counter_q[port];
 
     always_comb begin
+      // What is the relationship between data and index width?
+      automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
+
+      // Pointer to index
+      automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
+
       stride = mem_is_strided ? mem_spatz_req.rs2 >> mem_spatz_req.vtype.vsew : 'd1;
 
       if (mem_is_indexed) begin
         // What is the relationship between data and index width?
-        automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
+        // automatic logic [1:0] data_index_width_diff = int'(mem_spatz_req.vtype.vsew) - int'(mem_spatz_req.op_mem.ew);
 
         // Pointer to index
-        automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
+        // automatic logic [idx_width(N_FU*ELENB)-1:0] word_index = (port << (MAXEW - data_index_width_diff)) + (maxew_t'(idx_offset << data_index_width_diff) >> data_index_width_diff) + (maxew_t'(idx_offset >> (MAXEW - data_index_width_diff)) << (MAXEW - data_index_width_diff)) * NrMemPorts;
 
         // Index
         unique case (mem_spatz_req.op_mem.ew)
@@ -596,7 +602,8 @@ module spatz_vlsu
   logic     vrf_req_valid_q, vrf_req_ready_q;
 
   spill_register #(
-    .T(vrf_req_t)
+    .T(vrf_req_t),
+    .Bypass(0)
   ) i_vrf_req_register (
     .clk_i  (clk_i          ),
     .rst_ni (rst_ni         ),
@@ -1000,7 +1007,8 @@ module spatz_vlsu
   // Create memory requests
   for (genvar port = 0; port < NrMemPorts; port++) begin : gen_mem_req
     spill_register #(
-      .T(spatz_mem_req_t)
+      .T(spatz_mem_req_t),
+      .Bypass(0)
     ) i_spatz_mem_req_register (
       .clk_i   (clk_i                      ),
       .rst_ni  (rst_ni                     ),

@@ -43,14 +43,42 @@ module spatz_decoder
   /////////////
 
   always_comb begin : decoder
+    automatic logic [6:0] opcode = decoder_req_i.instr[6:0];
+    // Signals for the load and store instructions
+    automatic vreg_t ls_vd         = decoder_req_i.instr[11:7];
+    automatic vreg_t ls_rs1        = decoder_req_i.instr[19:15];
+    automatic vreg_t ls_s2         = decoder_req_i.instr[24:20];
+    automatic logic [2:0] ls_width = decoder_req_i.instr[14:12];
+    automatic logic ls_vm          = decoder_req_i.instr[25];
+    automatic logic [1:0] ls_mop   = decoder_req_i.instr[27:26];
+    automatic logic ls_mew         = decoder_req_i.instr[28];
+    automatic logic [2:0] ls_nf    = decoder_req_i.instr[31:29];
+
+    // Signals for the arithmetic instructions
+    automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
+    automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
+    automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
+    automatic vreg_t arith_d        = decoder_req_i.instr[11:7];
+    automatic logic arith_vm        = decoder_req_i.instr[25];
+
+    // Signals for CSR instructions
+    automatic logic [11:0] csr_addr = decoder_req_i.instr[31:20];
+    automatic vreg_t csr_rd         = decoder_req_i.instr[11:7];
+    automatic vreg_t csr_rs1        = decoder_req_i.instr[19:15];
+    automatic logic csr_is_imm      = decoder_req_i.instr[14];
+
+    // Signals for the setvl instruction
+    automatic vreg_t setvl_rs1 = decoder_req_i.instr[19:15];
+    automatic vreg_t setvl_rd  = decoder_req_i.instr[11:7];
+
     illegal_instr = 1'b0;
     spatz_req     = '0;
     reset_vstart  = 1'b1;
 
     // We have a new instruction that need to be decoded
     if (decoder_req_valid_i) begin
-      // Retrieve the opcode
-      automatic logic [6:0] opcode = decoder_req_i.instr[6:0];
+      // // Retrieve the opcode
+      // automatic logic [6:0] opcode = decoder_req_i.instr[6:0];
 
       unique casez (decoder_req_i.instr)
         // Load and store instructions
@@ -86,14 +114,14 @@ module spatz_decoder
         riscv_instr::VSOXEI16_V,
         riscv_instr::VSOXEI32_V,
         riscv_instr::VSOXEI64_V: begin
-          automatic vreg_t ls_vd         = decoder_req_i.instr[11:7];
-          automatic vreg_t ls_rs1        = decoder_req_i.instr[19:15];
-          automatic vreg_t ls_s2         = decoder_req_i.instr[24:20];
-          automatic logic [2:0] ls_width = decoder_req_i.instr[14:12];
-          automatic logic ls_vm          = decoder_req_i.instr[25];
-          automatic logic [1:0] ls_mop   = decoder_req_i.instr[27:26];
-          automatic logic ls_mew         = decoder_req_i.instr[28];
-          automatic logic [2:0] ls_nf    = decoder_req_i.instr[31:29];
+          // automatic vreg_t ls_vd         = decoder_req_i.instr[11:7];
+          // automatic vreg_t ls_rs1        = decoder_req_i.instr[19:15];
+          // automatic vreg_t ls_s2         = decoder_req_i.instr[24:20];
+          // automatic logic [2:0] ls_width = decoder_req_i.instr[14:12];
+          // automatic logic ls_vm          = decoder_req_i.instr[25];
+          // automatic logic [1:0] ls_mop   = decoder_req_i.instr[27:26];
+          // automatic logic ls_mew         = decoder_req_i.instr[28];
+          // automatic logic [2:0] ls_nf    = decoder_req_i.instr[31:29];
 
           // Retrieve VSEW
           unique case ({ls_mew, ls_width})
@@ -369,11 +397,11 @@ module spatz_decoder
         riscv_instr::VNCLIPU_WV,
         riscv_instr::VNCLIPU_WX,
         riscv_instr::VNCLIPU_WI: begin
-          automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
-          automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
-          automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
-          automatic vreg_t arith_d        = decoder_req_i.instr[11:7];
-          automatic logic arith_vm        = decoder_req_i.instr[25];
+          // automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
+          // automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
+          // automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
+          // automatic vreg_t arith_d        = decoder_req_i.instr[11:7];
+          // automatic logic arith_vm        = decoder_req_i.instr[25];
 
           spatz_req.op_arith.vm = arith_vm;
           spatz_req.op_sld.vm   = arith_vm;
@@ -903,8 +931,8 @@ module spatz_decoder
 
         // Move to the scalar RF
         riscv_instr::VMV_X_S: begin
-          automatic vreg_t arith_s2 = decoder_req_i.instr[24:20];
-          automatic vreg_t arith_d  = decoder_req_i.instr[11:7];
+          // automatic vreg_t arith_s2 = decoder_req_i.instr[24:20];
+          // automatic vreg_t arith_d  = decoder_req_i.instr[11:7];
 
           spatz_req.op                 = VADD;
           spatz_req.ex_unit            = VFU;
@@ -991,11 +1019,11 @@ module spatz_decoder
         riscv_instr::VFSLIDE1UP_VF,
         riscv_instr::VFSLIDE1DOWN_VF: begin
           if (spatz_pkg::FPU) begin
-            automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
-            automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
-            automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
-            automatic vreg_t arith_d        = decoder_req_i.instr[11:7];
-            automatic logic arith_vm        = decoder_req_i.instr[25];
+            // automatic opcodev_func3_e func3 = opcodev_func3_e'(decoder_req_i.instr[14:12]);
+            // automatic vreg_t arith_s1       = decoder_req_i.instr[19:15];
+            // automatic vreg_t arith_s2       = decoder_req_i.instr[24:20];
+            // automatic vreg_t arith_d        = decoder_req_i.instr[11:7];
+            // automatic logic arith_vm        = decoder_req_i.instr[25];
 
             spatz_req.op_arith.vm = arith_vm;
             spatz_req.op_sld.vm   = arith_vm;
@@ -1282,8 +1310,8 @@ module spatz_decoder
         // Move to the scalar FP RF
         riscv_instr::VFMV_F_S: begin
           if (spatz_pkg::FPU) begin
-            automatic vreg_t arith_s2 = decoder_req_i.instr[24:20];
-            automatic vreg_t arith_d  = decoder_req_i.instr[11:7];
+            // automatic vreg_t arith_s2 = decoder_req_i.instr[24:20];
+            // automatic vreg_t arith_d  = decoder_req_i.instr[11:7];
 
             spatz_req.op                 = VADD;
             spatz_req.ex_unit            = VFU;
@@ -1758,10 +1786,10 @@ module spatz_decoder
         riscv_instr::CSRRWI,
         riscv_instr::CSRRSI,
         riscv_instr::CSRRCI: begin
-          automatic logic [11:0] csr_addr = decoder_req_i.instr[31:20];
-          automatic vreg_t csr_rd         = decoder_req_i.instr[11:7];
-          automatic vreg_t csr_rs1        = decoder_req_i.instr[19:15];
-          automatic logic csr_is_imm      = decoder_req_i.instr[14];
+          // automatic logic [11:0] csr_addr = decoder_req_i.instr[31:20];
+          // automatic vreg_t csr_rd         = decoder_req_i.instr[11:7];
+          // automatic vreg_t csr_rs1        = decoder_req_i.instr[19:15];
+          // automatic logic csr_is_imm      = decoder_req_i.instr[14];
 
           spatz_req.op      = VCSR;
           spatz_req.ex_unit = CON;
@@ -1828,8 +1856,8 @@ module spatz_decoder
         riscv_instr::VSETVL,
         riscv_instr::VSETVLI,
         riscv_instr::VSETIVLI: begin
-          automatic vreg_t setvl_rs1 = decoder_req_i.instr[19:15];
-          automatic vreg_t setvl_rd  = decoder_req_i.instr[11:7];
+          // automatic vreg_t setvl_rs1 = decoder_req_i.instr[19:15];
+          // automatic vreg_t setvl_rd  = decoder_req_i.instr[11:7];
 
           spatz_req.rd      = setvl_rd;
           spatz_req.use_rd  = 1'b1;

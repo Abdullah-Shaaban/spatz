@@ -520,6 +520,8 @@ module spatz_controller
           // vtype is illegal -> illegal instruction
           if (vtype_q.vill) begin
             issue_rsp_o.accept = 1'b0;
+          end else begin
+            issue_rsp_o.writeback = spatz_req.use_rd;
           end
         end // VFU
         LSU: begin
